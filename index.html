@@ -15,7 +15,9 @@
   .card {
     max-width: 420px; width: 100%; background: #131c2e; border-radius: 20px;
     padding: 36px 28px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    transition: opacity .6s ease;
   }
+  .card.fade { opacity: 0; }
   .badge {
     width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 20px;
     display: flex; align-items: center; justify-content: center;
@@ -33,7 +35,7 @@
 </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="card">
     <div class="badge" id="badge"></div>
     <h1 id="title"></h1>
     <p id="msg"></p>
@@ -42,35 +44,58 @@
     <div class="brand">LANTERN AI · FamilyShield</div>
   </div>
 <script>
-  var cancelled = new URLSearchParams(location.search).get('status') === 'cancel';
-  var badge = document.getElementById('badge');
-  var openBtn = document.getElementById('openBtn');
+  var params    = new URLSearchParams(location.search);
+  var cancelled = params.get('status') === 'cancel';
+  var noApp     = params.get('noapp') === '1';   // ήρθαμε εδώ από fallback (η app δεν άνοιξε)
 
-  // Σύνδεσμος που ανοίγει την εφαρμογή Lantern AI (μέσω package, χωρίς αλλαγή κώδικα).
-  var APP_INTENT = 'intent://open#Intent;package=com.lanternai.familyshield;end';
+  var card   = document.getElementById('card');
+  var badge  = document.getElementById('badge');
+  var openBtn= document.getElementById('openBtn');
+  var titleEl= document.getElementById('title');
+  var msgEl  = document.getElementById('msg');
+  var hintEl = document.getElementById('hint');
+
+  // Όνομα πακέτου της εφαρμογής (από το AndroidManifest / build).
+  var PKG = 'com.lanternai.familyshield';
+
+  // Αν η app ΔΕΝ ανοίξει, ο browser πάει εδώ (καθαρή σελίδα) — ΠΟΤΕ στο "αερόστατο".
+  var FALLBACK = location.origin + location.pathname
+                 + '?status=' + (cancelled ? 'cancel' : 'ok') + '&noapp=1';
+
+  // intent:// με package + browser_fallback_url → ανοίγει την app χωρίς αλλαγή κώδικα.
+  var APP_INTENT = 'intent://#Intent;package=' + PKG +
+                   ';S.browser_fallback_url=' + encodeURIComponent(FALLBACK) + ';end';
 
   function openApp() {
     try { window.location.href = APP_INTENT; } catch (e) {}
   }
 
+  // Στήσιμο εμφάνισης ανάλογα με ok / cancel.
   if (cancelled) {
-    badge.textContent = '\u2715';
+    badge.textContent = '\u2715';            // ✕
     badge.style.background = '#dc2626';
-    document.getElementById('title').textContent = 'Η πληρωμή ακυρώθηκε';
-    document.getElementById('msg').textContent = 'Δεν ολοκληρώθηκε καμία χρέωση. Μπορείς να ξαναπροσπαθήσεις όποτε θες από την εφαρμογή.';
-    document.getElementById('hint').textContent = '';
-    openBtn.textContent = 'Επιστροφή στην εφαρμογή';
+    titleEl.textContent = 'Η πληρωμή ακυρώθηκε';
+    msgEl.textContent   = 'Δεν ολοκληρώθηκε καμία χρέωση. Μπορείς να ξαναπροσπαθήσεις όποτε θες από την εφαρμογή.';
     openBtn.style.background = '#3b4763';
-    openBtn.addEventListener('click', function (ev) { ev.preventDefault(); openApp(); });
   } else {
-    badge.textContent = '\u2713';
+    badge.textContent = '\u2713';            // ✓
     badge.style.background = '#16a34a';
-    document.getElementById('title').textContent = 'Η πληρωμή ολοκληρώθηκε';
-    document.getElementById('msg').textContent = 'Ευχαριστούμε! Η συνδρομή σου ενεργοποιείται μέσα σε λίγα δευτερόλεπτα.';
-    document.getElementById('hint').textContent = 'Αν δεν γυρίσεις αυτόματα, πάτησε το κουμπί παραπάνω.';
-    openBtn.addEventListener('click', function (ev) { ev.preventDefault(); openApp(); });
-    // Προσπάθεια αυτόματης επιστροφής στην εφαρμογή μετά από ~2 δευτερόλεπτα.
-    setTimeout(openApp, 2000);
+    titleEl.textContent = 'Η πληρωμή ολοκληρώθηκε';
+    msgEl.textContent   = 'Ευχαριστούμε! Η συνδρομή σου ενεργοποιείται μέσα σε λίγα δευτερόλεπτα.';
+  }
+
+  openBtn.addEventListener('click', function (ev) { ev.preventDefault(); openApp(); });
+
+  if (noApp) {
+    // Η αυτόματη επιστροφή δεν δούλεψε (π.χ. ασυνήθιστος browser). Καθαρό μήνυμα, ΧΩΡΙΣ
+    // νέα αυτόματη προσπάθεια (για να μην μπει σε βρόχο). Ο χρήστης κλείνει την καρτέλα
+    // ή πατά το κουμπί.
+    hintEl.textContent = 'Κλείσε αυτή την καρτέλα και άνοιξε την εφαρμογή Lantern AI, ή πάτησε το κουμπί.';
+  } else {
+    // Κανονική ροή: το μήνυμα σβήνει σιγά-σιγά και γυρνάμε αυτόματα στην app.
+    hintEl.textContent = 'Επιστροφή στην εφαρμογή...';
+    setTimeout(function () { card.classList.add('fade'); }, 1400); // αρχίζει το σβήσιμο
+    setTimeout(openApp, 2000);                                     // γύρισμα στην app
   }
 </script>
 </body>
